@@ -9,6 +9,7 @@ public record JoinRoomResponse(
         String roomCode,
         String deviceId,
         String deviceName,
+        String deviceToken,
         DeviceRole role,
         Instant joinedAt,
         int deviceCount,

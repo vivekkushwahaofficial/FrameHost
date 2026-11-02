@@ -1,19 +1,26 @@
 package com.framehost.room.service;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 
+import com.framehost.common.AuthorizationException;
 import com.framehost.device.Device;
 import com.framehost.device.DeviceRole;
+import com.framehost.device.dto.DeviceManagementResponse;
+import com.framehost.device.dto.DeviceResponse;
+import com.framehost.device.service.DeviceAuthenticationService;
+import com.framehost.device.service.DeviceNotFoundException;
+import com.framehost.device.service.DeviceTokenService;
 import com.framehost.room.dto.CreateRoomResponse;
 import com.framehost.room.dto.JoinRoomRequest;
 import com.framehost.room.dto.JoinRoomResponse;
 import com.framehost.room.model.Room;
 import com.framehost.room.repository.InMemoryRoomRepository;
 
-// Contains the business logic for creating and joining rooms.
+// Contains the business logic for room and device management.
 @Service
 public class RoomService {
 
@@ -21,14 +28,20 @@ public class RoomService {
 
     private final InMemoryRoomRepository roomRepository;
     private final RoomCodeGenerator roomCodeGenerator;
+    private final DeviceTokenService deviceTokenService;
+    private final DeviceAuthenticationService authenticationService;
 
     // Constructor injection.
     public RoomService(
             InMemoryRoomRepository roomRepository,
-            RoomCodeGenerator roomCodeGenerator
+            RoomCodeGenerator roomCodeGenerator,
+            DeviceTokenService deviceTokenService,
+            DeviceAuthenticationService authenticationService
     ) {
         this.roomRepository = roomRepository;
         this.roomCodeGenerator = roomCodeGenerator;
+        this.deviceTokenService = deviceTokenService;
+        this.authenticationService = authenticationService;
     }
 
     // Creates a room and registers its creator as Host.
@@ -40,10 +53,10 @@ public class RoomService {
 
             Room room = new Room(roomCode, Instant.now());
 
-            // Generate the Host device ID.
             String hostDeviceId = UUID.randomUUID().toString();
+            String deviceToken = deviceTokenService.generateToken();
+            String tokenHash = deviceTokenService.hashToken(deviceToken);
 
-            // Create the Host device.
             Device host = new Device(
                     hostDeviceId,
                     "Host",
@@ -51,15 +64,18 @@ public class RoomService {
                     Instant.now()
             );
 
-            // Register the Host as the first room participant.
-            room.addDevice(host);
+            if (!room.addDevice(host, tokenHash)) {
+                throw new IllegalStateException(
+                        "Unable to register the Host device."
+                );
+            }
 
-            // Save the room only if its code is unique.
             if (roomRepository.saveIfAbsent(room)) {
 
                 return new CreateRoomResponse(
                         room.roomCode(),
                         host.deviceId(),
+                        deviceToken,
                         host.role(),
                         room.createdAt(),
                         room.deviceCount(),
@@ -79,19 +95,12 @@ public class RoomService {
             JoinRoomRequest request
     ) {
 
-        // Normalize the room code.
-        String normalizedRoomCode = roomCode.trim().toUpperCase();
+        Room room = findRoom(roomCode);
 
-        // Find the requested room.
-        Room room = roomRepository.findByRoomCode(normalizedRoomCode)
-                .orElseThrow(
-                        () -> new RoomNotFoundException(normalizedRoomCode)
-                );
-
-        // Generate a unique device ID.
         String deviceId = UUID.randomUUID().toString();
+        String deviceToken = deviceTokenService.generateToken();
+        String tokenHash = deviceTokenService.hashToken(deviceToken);
 
-        // Create a device with the default Follower role.
         Device device = new Device(
                 deviceId,
                 request.deviceName().trim(),
@@ -99,20 +108,145 @@ public class RoomService {
                 Instant.now()
         );
 
-        // Add the device if room capacity is available.
-        if (!room.addDevice(device)) {
-            throw new RoomFullException(normalizedRoomCode);
+        if (!room.addDevice(device, tokenHash)) {
+            throw new RoomFullException(room.roomCode());
         }
 
-        // Return the joining device information.
         return new JoinRoomResponse(
                 room.roomCode(),
                 device.deviceId(),
                 device.deviceName(),
+                deviceToken,
                 device.role(),
                 device.joinedAt(),
                 room.deviceCount(),
                 Room.MAX_DEVICES
         );
+    }
+
+    // Returns the room's device list to its authenticated Host only.
+    public List<DeviceResponse> getDevices(
+            String roomCode,
+            String authorizationHeader
+    ) {
+
+        Room room = findRoom(roomCode);
+
+        Device authenticatedDevice = authenticationService.authenticate(
+                room,
+                authorizationHeader
+        );
+
+        requireHost(authenticatedDevice);
+
+        return room.getDevices()
+                .stream()
+                .map(device -> new DeviceResponse(
+                        device.deviceId(),
+                        device.deviceName(),
+                        device.role(),
+                        device.joinedAt()
+                ))
+                .toList();
+    }
+
+    // Allows an authenticated non-Host device to leave its room.
+    public DeviceManagementResponse leaveRoom(
+            String roomCode,
+            String authorizationHeader
+    ) {
+
+        Room room = findRoom(roomCode);
+
+        Device authenticatedDevice = authenticationService.authenticate(
+                room,
+                authorizationHeader
+        );
+
+        if (authenticatedDevice.role() == DeviceRole.HOST) {
+            throw new RoomOperationConflictException(
+                    "The Host cannot leave an active room."
+            );
+        }
+
+        Device removedDevice = room.removeOwnDevice(
+                authenticatedDevice.deviceId()
+        );
+
+        if (removedDevice == null) {
+            throw new DeviceNotFoundException(
+                    authenticatedDevice.deviceId()
+            );
+        }
+
+        return new DeviceManagementResponse(
+                room.roomCode(),
+                removedDevice.deviceId(),
+                "Device left the room successfully.",
+                room.deviceCount()
+        );
+    }
+
+    // Allows the authenticated Host to remove another device.
+    public DeviceManagementResponse removeDevice(
+            String roomCode,
+            String targetDeviceId,
+            String authorizationHeader
+    ) {
+
+        Room room = findRoom(roomCode);
+
+        Device authenticatedDevice = authenticationService.authenticate(
+                room,
+                authorizationHeader
+        );
+
+        requireHost(authenticatedDevice);
+
+        Device targetDevice = room.findDevice(targetDeviceId);
+
+        if (targetDevice == null) {
+            throw new DeviceNotFoundException(targetDeviceId);
+        }
+
+        if (targetDevice.role() == DeviceRole.HOST) {
+            throw new RoomOperationConflictException(
+                    "The Host device cannot be removed."
+            );
+        }
+
+        Device removedDevice = room.removeDevice(targetDeviceId);
+
+        if (removedDevice == null) {
+            throw new DeviceNotFoundException(targetDeviceId);
+        }
+
+        return new DeviceManagementResponse(
+                room.roomCode(),
+                removedDevice.deviceId(),
+                "Device removed successfully.",
+                room.deviceCount()
+        );
+    }
+
+    // Finds a room using its normalized room code.
+    private Room findRoom(String roomCode) {
+
+        String normalizedRoomCode = roomCode.trim().toUpperCase();
+
+        return roomRepository.findByRoomCode(normalizedRoomCode)
+                .orElseThrow(
+                        () -> new RoomNotFoundException(normalizedRoomCode)
+                );
+    }
+
+    // Ensures that the authenticated device is the Host.
+    private void requireHost(Device device) {
+
+        if (device.role() != DeviceRole.HOST) {
+            throw new AuthorizationException(
+                    "Only the Host can perform this operation."
+            );
+        }
     }
 }
