@@ -8,6 +8,7 @@ import com.framehost.device.DeviceRole;
 public record CreateRoomResponse(
         String roomCode,
         String hostDeviceId,
+        String deviceToken,
         DeviceRole role,
         Instant createdAt,
         int deviceCount,
