@@ -53,6 +53,16 @@ function App() {
   // Tracks which device's permissions are currently being updated.
   const [updatingDeviceId, setUpdatingDeviceId] = useState<string | null>(null);
 
+  // Automatically scroll to the room access form when opened.
+  useEffect(() => {
+    if (!accessMode) return;
+
+    document.getElementById("room-access")?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  }, [accessMode]);
+
   // Extract primitive values for stable effect dependencies.
   const currentRoomCode = roomSession?.roomCode ?? "";
   const currentDeviceToken = roomSession?.deviceToken ?? "";
@@ -248,7 +258,7 @@ function App() {
 
   return (
     <>
-      <Navbar />
+      <Navbar isRoomActive={roomSession !== null} />
 
       <main>
         {roomSession ? (
