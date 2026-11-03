@@ -2,6 +2,7 @@ package com.framehost.room.controller;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 import static org.mockito.Mockito.when;
@@ -51,13 +52,15 @@ class RoomControllerTest {
                         "device-1",
                         "Host",
                         DeviceRole.HOST,
-                        Instant.parse("2026-11-02T10:00:00Z")
+                        Instant.parse("2026-11-02T10:00:00Z"),
+                        Set.of()
                 ),
                 new DeviceResponse(
                         "device-2",
                         "Laptop",
                         DeviceRole.FOLLOWER,
-                        Instant.parse("2026-11-02T10:05:00Z")
+                        Instant.parse("2026-11-02T10:05:00Z"),
+                        Set.of()
                 )
         );
 
@@ -72,7 +75,9 @@ class RoomControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(2))
                 .andExpect(jsonPath("$[0].role").value("HOST"))
-                .andExpect(jsonPath("$[1].role").value("FOLLOWER"));
+                .andExpect(jsonPath("$[1].role").value("FOLLOWER"))
+                .andExpect(jsonPath("$[0].permissions").isEmpty())
+                .andExpect(jsonPath("$[1].permissions").isEmpty());
     }
 
     @Test

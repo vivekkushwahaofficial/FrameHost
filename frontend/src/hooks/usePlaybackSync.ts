@@ -1,0 +1,233 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+
+import type { DeviceRole } from "../types/room";
+
+import {
+  createPlaybackStompClient,
+  type PlaybackStompClient,
+} from "../services/websocket/stompClient";
+
+import type { LocalPlaybackEvent, PlaybackState } from "../types/playback";
+
+// WebSocket connection states.
+export type ConnectionStatus =
+  | "DISCONNECTED"
+  | "CONNECTING"
+  | "CONNECTED"
+  | "RECONNECTING";
+
+// Hook input configuration.
+interface UsePlaybackSyncOptions {
+  roomCode: string;
+  deviceToken: string;
+  deviceRole: DeviceRole;
+  enabled?: boolean;
+}
+
+// Hook return values.
+interface UsePlaybackSyncReturn {
+  connectionStatus: ConnectionStatus;
+  remoteState: PlaybackState | null;
+  error: string | null;
+  onLocalPlaybackEvent: (event: LocalPlaybackEvent) => void;
+  sendCommand: (event: LocalPlaybackEvent) => boolean;
+}
+
+// Connection state associated with a particular room session.
+interface ConnectionState {
+  key: string;
+  status: ConnectionStatus;
+}
+
+// Remote playback state associated with a particular room session.
+interface RemotePlaybackState {
+  key: string;
+  state: PlaybackState;
+}
+
+// Error associated with a particular room session.
+interface ConnectionError {
+  key: string;
+  message: string;
+}
+
+export function usePlaybackSync({
+  roomCode,
+  deviceToken,
+  deviceRole,
+  enabled = true,
+}: UsePlaybackSyncOptions): UsePlaybackSyncReturn {
+  // Stores the active STOMP client.
+  const clientRef = useRef<PlaybackStompClient | null>(null);
+
+  // Tracks the latest received server state version.
+  const latestVersionRef = useRef(0);
+
+  // Keeps the latest device role available to callbacks.
+  const roleRef = useRef(deviceRole);
+
+  // Normalize the room code before connecting.
+  const normalizedRoomCode = roomCode.trim().toUpperCase();
+
+  // Check whether the connection has valid credentials.
+  const shouldConnect =
+    enabled && normalizedRoomCode.length > 0 && deviceToken.trim().length > 0;
+
+  // Identifies the current room session.
+  const connectionKey = `${normalizedRoomCode}:${deviceToken}`;
+
+  // Store connection information.
+  const [connection, setConnection] = useState<ConnectionState>({
+    key: "",
+    status: "DISCONNECTED",
+  });
+
+  // Store the latest remote playback state.
+  const [remotePlayback, setRemotePlayback] =
+    useState<RemotePlaybackState | null>(null);
+
+  // Store connection errors.
+  const [connectionError, setConnectionError] =
+    useState<ConnectionError | null>(null);
+
+  // Keep the latest device role updated.
+  useEffect(() => {
+    roleRef.current = deviceRole;
+  }, [deviceRole]);
+
+  // Establish and manage the STOMP connection.
+  useEffect(() => {
+    if (!shouldConnect) {
+      clientRef.current = null;
+      return;
+    }
+
+    let isActive = true;
+
+    // Reset the version tracker for the new session.
+    latestVersionRef.current = 0;
+
+    // Create the authenticated STOMP client.
+    const client = createPlaybackStompClient({
+      roomCode: normalizedRoomCode,
+      deviceToken,
+
+      // Called when the WebSocket connection succeeds.
+      onConnected: () => {
+        if (!isActive) return;
+
+        setConnection({
+          key: connectionKey,
+          status: "CONNECTED",
+        });
+
+        setConnectionError(null);
+      },
+
+      // Called when the connection closes.
+      onDisconnected: () => {
+        if (!isActive) return;
+
+        setConnection({
+          key: connectionKey,
+          status: "RECONNECTING",
+        });
+      },
+
+      // Handle connection errors.
+      onError: (message) => {
+        if (!isActive) return;
+
+        setConnectionError({
+          key: connectionKey,
+          message,
+        });
+      },
+
+      // Receive authoritative playback states from the backend.
+      onPlaybackState: (state) => {
+        if (!isActive) return;
+
+        // Ignore invalid or outdated state versions.
+        if (
+          !Number.isInteger(state.stateVersion) ||
+          state.stateVersion <= latestVersionRef.current
+        ) {
+          return;
+        }
+
+        latestVersionRef.current = state.stateVersion;
+
+        setRemotePlayback({
+          key: connectionKey,
+          state,
+        });
+      },
+    });
+
+    clientRef.current = client;
+
+    // Clean up the connection when the room session changes.
+    return () => {
+      isActive = false;
+
+      if (clientRef.current === client) {
+        clientRef.current = null;
+      }
+
+      void client.disconnect();
+    };
+  }, [shouldConnect, normalizedRoomCode, deviceToken, connectionKey]);
+
+  // Send a playback command to the backend.
+  const sendCommand = useCallback((event: LocalPlaybackEvent): boolean => {
+    if (!clientRef.current) {
+      return false;
+    }
+
+    return clientRef.current.sendCommand(event);
+  }, []);
+
+  // Handle playback events generated by the local player.
+  const onLocalPlaybackEvent = useCallback(
+    (event: LocalPlaybackEvent) => {
+      const currentRole = roleRef.current;
+
+      // Accept only roles defined by the backend.
+      if (
+        currentRole !== "HOST" &&
+        currentRole !== "CONTROLLER" &&
+        currentRole !== "FOLLOWER"
+      ) {
+        return;
+      }
+
+      // Backend remains responsible for permission validation.
+      sendCommand(event);
+    },
+    [sendCommand],
+  );
+
+  // Derive the current connection status.
+  const connectionStatus: ConnectionStatus = !shouldConnect
+    ? "DISCONNECTED"
+    : connection.key === connectionKey
+      ? connection.status
+      : "CONNECTING";
+
+  // Return state only for the current room session.
+  const remoteState =
+    remotePlayback?.key === connectionKey ? remotePlayback.state : null;
+
+  // Return errors only for the current room session.
+  const error =
+    connectionError?.key === connectionKey ? connectionError.message : null;
+
+  return {
+    connectionStatus,
+    remoteState,
+    error,
+    onLocalPlaybackEvent,
+    sendCommand,
+  };
+}

@@ -1,4 +1,9 @@
-function Hero() {
+interface HeroProps {
+  onCreateRoom: () => void;
+  onJoinRoom: () => void;
+}
+
+function Hero({ onCreateRoom, onJoinRoom }: HeroProps) {
   return (
     <section id="get-started" className="bg-white px-6 py-20 sm:py-28">
       <div className="mx-auto max-w-4xl text-center">
@@ -23,6 +28,7 @@ function Hero() {
         <div className="mt-10 flex flex-col justify-center gap-4 sm:flex-row">
           <button
             type="button"
+            onClick={onCreateRoom}
             className="rounded-lg bg-blue-600 px-7 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
           >
             Create Room
@@ -30,6 +36,7 @@ function Hero() {
 
           <button
             type="button"
+            onClick={onJoinRoom}
             className="rounded-lg border border-gray-300 bg-white px-7 py-3 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
           >
             Join Room
