@@ -4,10 +4,15 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import com.framehost.device.Device;
 import com.framehost.device.DeviceRole;
+import com.framehost.playback.model.PlaybackPermission;
+import com.framehost.playback.model.PlaybackState;
+import com.framehost.playback.model.PlaybackStatus;
+import com.framehost.playback.model.VideoProvider;
 
 // Represents a room and its participating devices.
 public class Room {
@@ -24,12 +29,18 @@ public class Room {
     // Records when the room was terminated.
     private Instant endedAt;
 
+    // Stores the current playback state for this room.
+    private PlaybackState playbackState;
+
     // Stores public device information.
     private final ConcurrentHashMap<String, Device> devices
             = new ConcurrentHashMap<>();
 
     // Stores only hashed authentication tokens.
     private final ConcurrentHashMap<String, String> deviceTokenHashes
+            = new ConcurrentHashMap<>();
+    // Stores permissions separately for each participating device.
+    private final ConcurrentHashMap<String, Set<PlaybackPermission>> devicePlaybackPermissions
             = new ConcurrentHashMap<>();
 
     public Room(String roomCode, Instant createdAt) {
@@ -60,6 +71,45 @@ public class Room {
         return status == RoomStatus.ACTIVE;
     }
 
+    // Returns the current playback state.
+    public synchronized PlaybackState playbackState() {
+        return playbackState;
+    }
+
+    // Updates playback state and generates a server-controlled version.
+    public synchronized PlaybackState updatePlaybackState(
+            VideoProvider videoProvider,
+            String videoId,
+            PlaybackStatus playbackStatus,
+            double currentTime,
+            double playbackRate
+    ) {
+
+        if (!isActive()) {
+            throw new IllegalStateException(
+                    "Cannot update playback state of an inactive room."
+            );
+        }
+
+        long nextVersion = playbackState == null
+                ? 1
+                : playbackState.stateVersion() + 1;
+
+        PlaybackState newState = new PlaybackState(
+                videoProvider,
+                videoId,
+                playbackStatus,
+                currentTime,
+                playbackRate,
+                nextVersion,
+                Instant.now()
+        );
+
+        playbackState = newState;
+
+        return newState;
+    }
+
     // Ends the room and invalidates all device credentials.
     public synchronized boolean end() {
 
@@ -73,6 +123,12 @@ public class Room {
 
         // Revoke every registered device token.
         deviceTokenHashes.clear();
+
+        // Revoke all playback permissions.
+        devicePlaybackPermissions.clear();
+
+        // Release the room's playback state.
+        playbackState = null;
 
         return true;
     }
@@ -163,6 +219,8 @@ public class Room {
 
         deviceTokenHashes.remove(deviceId);
 
+        devicePlaybackPermissions.remove(deviceId);
+
         return devices.remove(deviceId);
     }
 
@@ -179,9 +237,86 @@ public class Room {
             return null;
         }
 
+        // Remove authentication credentials.
         deviceTokenHashes.remove(deviceId);
 
+        // Remove all playback permissions.
+        devicePlaybackPermissions.remove(deviceId);
+
+        // Remove the device from the room.
         return devices.remove(deviceId);
+    }
+
+    // Replaces the complete permission set for a Follower.
+    public synchronized void updatePlaybackPermissions(
+            String deviceId,
+            Set<PlaybackPermission> permissions
+    ) {
+
+        if (!isActive()) {
+            throw new IllegalStateException("Room is inactive.");
+        }
+
+        Device device = devices.get(deviceId);
+
+        if (device == null) {
+            throw new IllegalArgumentException("Device not found.");
+        }
+
+        if (device.role() == DeviceRole.HOST) {
+            throw new IllegalArgumentException(
+                    "Host permissions cannot be modified."
+            );
+        }
+
+        if (permissions == null) {
+            throw new IllegalArgumentException("Permissions are required.");
+        }
+
+        if (permissions.isEmpty()) {
+            devicePlaybackPermissions.remove(deviceId);
+            return;
+        }
+
+        devicePlaybackPermissions.put(deviceId, Set.copyOf(permissions));
+    }
+
+    // Checks whether a device has a particular permission.
+    public synchronized boolean hasPlaybackPermission(
+            String deviceId,
+            PlaybackPermission permission
+    ) {
+
+        if (!isActive() || permission == null) {
+            return false;
+        }
+
+        Device device = devices.get(deviceId);
+
+        if (device == null) {
+            return false;
+        }
+
+        // Host always has full playback control.
+        if (device.role() == DeviceRole.HOST) {
+            return true;
+        }
+
+        return devicePlaybackPermissions
+                .getOrDefault(deviceId, Set.of())
+                .contains(permission);
+    }
+
+    // Returns an immutable snapshot of a device's permissions.
+    public synchronized Set<PlaybackPermission> getPlaybackPermissions(
+            String deviceId
+    ) {
+
+        if (!isActive() || !devices.containsKey(deviceId)) {
+            return Set.of();
+        }
+
+        return devicePlaybackPermissions.getOrDefault(deviceId, Set.of());
     }
 
     // Returns a snapshot of participating devices.
@@ -193,4 +328,5 @@ public class Room {
     public synchronized int deviceCount() {
         return devices.size();
     }
+
 }
