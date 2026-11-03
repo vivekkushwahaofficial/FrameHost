@@ -15,6 +15,7 @@ import com.framehost.device.service.DeviceAuthenticationService;
 import com.framehost.device.service.DeviceNotFoundException;
 import com.framehost.device.service.DeviceTokenService;
 import com.framehost.room.dto.CreateRoomResponse;
+import com.framehost.room.dto.EndRoomResponse;
 import com.framehost.room.dto.JoinRoomRequest;
 import com.framehost.room.dto.JoinRoomResponse;
 import com.framehost.room.model.Room;
@@ -96,6 +97,12 @@ public class RoomService {
     ) {
 
         Room room = findRoom(roomCode);
+
+        if (!room.isActive()) {
+            throw new RoomOperationConflictException(
+                    "Cannot join an inactive room."
+            );
+        }
 
         String deviceId = UUID.randomUUID().toString();
         String deviceToken = deviceTokenService.generateToken();
@@ -226,6 +233,45 @@ public class RoomService {
                 removedDevice.deviceId(),
                 "Device removed successfully.",
                 room.deviceCount()
+        );
+    }
+
+    // Allows only the authenticated Host to end an active room.
+    public EndRoomResponse endRoom(
+            String roomCode,
+            String authorizationHeader
+    ) {
+
+        Room room = findRoom(roomCode);
+
+        // Authenticate before checking lifecycle status.
+        Device authenticatedDevice = authenticationService.authenticate(
+                room,
+                authorizationHeader
+        );
+
+        // Only an authenticated Host can terminate the room.
+        requireHost(authenticatedDevice);
+
+        // Do not reveal room status to unauthenticated callers.
+        if (!room.isActive()) {
+            throw new RoomOperationConflictException(
+                    "This room has already ended."
+            );
+        }
+
+        // End the room and revoke all device tokens.
+        if (!room.end()) {
+            throw new RoomOperationConflictException(
+                    "Unable to end the room."
+            );
+        }
+
+        return new EndRoomResponse(
+                room.roomCode(),
+                room.status(),
+                room.endedAt(),
+                "Room ended successfully."
         );
     }
 

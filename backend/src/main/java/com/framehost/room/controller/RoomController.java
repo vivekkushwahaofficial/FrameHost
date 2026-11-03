@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.framehost.device.dto.DeviceManagementResponse;
 import com.framehost.device.dto.DeviceResponse;
 import com.framehost.room.dto.CreateRoomResponse;
+import com.framehost.room.dto.EndRoomResponse;
 import com.framehost.room.dto.JoinRoomRequest;
 import com.framehost.room.dto.JoinRoomResponse;
 import com.framehost.room.service.RoomService;
@@ -120,4 +121,24 @@ public class RoomController {
 
         return ResponseEntity.ok(response);
     }
+
+    // DELETE /api/v1/rooms/{roomCode}
+    // Allows the authenticated Host to end the room.
+    @DeleteMapping("/{roomCode}")
+    public ResponseEntity<EndRoomResponse> endRoom(
+            @PathVariable String roomCode,
+            @RequestHeader(
+                    value = "Authorization",
+                    required = false
+            ) String authorizationHeader
+    ) {
+
+        EndRoomResponse response = roomService.endRoom(
+                roomCode,
+                authorizationHeader
+        );
+
+        return ResponseEntity.ok(response);
+    }
+
 }
