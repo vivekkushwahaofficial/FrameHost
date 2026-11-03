@@ -2,10 +2,38 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+    <!-- FrameHost browser tab icon -->
+    <link rel="icon" type="image/png" href="/icon.png" />
+
+    <!-- Responsive layout -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
+
+    <!-- Browser tab title -->
+    <title>FrameHost - Watch Together</title>
+
+    <!-- SEO description -->
+    <meta
+      name="description"
+      content="Watch YouTube together across multiple devices with synchronized playback using FrameHost."
+    />
+
+    <meta name="theme-color" content="#ffffff" />
+    <script>
+      (() => {
+        const savedTheme = localStorage.getItem("framehost-theme");
+
+        const isDark =
+          savedTheme === "dark" ||
+          (savedTheme === null || savedTheme === "system"
+            ? window.matchMedia("(prefers-color-scheme: dark)").matches
+            : false);
+
+        document.documentElement.classList.toggle("dark", isDark);
+      })();
+    </script>
   </head>
+
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
