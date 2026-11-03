@@ -2,258 +2,370 @@
 
 ## 1. Overview
 
-FrameHost is a multi-device video synchronization and remote-control platform.
+FrameHost is an open-source, multi-device video synchronization and remote playback control platform.
 
-The system uses a frontend-backend architecture with real-time communication through WebSocket.
+It uses a React and TypeScript frontend with a Java and Spring Boot backend. REST APIs handle room and device management, while WebSocket with STOMP handles real-time playback communication.
 
-The backend maintains the authoritative playback state for every room.
+The backend maintains the authoritative playback state for each active room.
+
+The initial video provider is YouTube, integrated through the official YouTube IFrame Player API.
 
 ## 2. High-Level Architecture
 
 ```text
-+-------------------+
-|    Host Device    |
-|   React + TS      |
-+---------+---------+
-          |
-          |
-+---------v---------+
-|                   |
-|   Spring Boot     |
-|     Backend       |
-|                   |
-|  Room Management  |
-|  Device Management|
-|  Authorization   |
-|  Playback State   |
-|                   |
-+---------+---------+
-          |
-      WebSocket
-          |
-   +------+------+
-   |      |      |
-+--v--+ +-v----+ +--v-----+
-|Host | |Phone | | Tablet |
-+-----+ +------+ +--------+
+                   FrameHost
+                       |
+             +---------+---------+
+             |                   |
+          Frontend             Backend
+          React                Spring Boot
+          TypeScript           Java 21
+             |                   |
+             |---- REST API -----|
+             |                   |
+             |---- WebSocket ----|
+                    STOMP
+                       |
+              Room Playback State
+                       |
+             +---------+---------+
+             |         |         |
+            Host   Controller  Follower
 ```
+
+All connected devices communicate with the backend.
+
+The backend validates incoming playback commands, updates room state, and broadcasts accepted playback updates to devices subscribed to that room.
 
 ## 3. Frontend Architecture
 
-Technology:
+### Technology
 
 - React
 - TypeScript
 - Vite
-- CSS
+- Tailwind CSS
+- STOMP.js
 - YouTube IFrame Player API
 
-Responsibilities:
+### Responsibilities
 
 - Room creation and joining.
-- Device identity.
-- Host, Controller and Follower interfaces.
-- Video player initialization.
-- Playback controls.
-- WebSocket connection management.
-- Synchronization and drift correction.
-- Reconnection handling.
+- Device session management.
+- Host, Controller, and Follower interfaces.
+- YouTube player initialization and control.
+- Sending local playback events.
+- Receiving remote playback updates.
+- Managing authenticated WebSocket connections.
+- Tracking connection status.
+- Applying remote playback state to the player.
 
-Suggested structure:
+### Current Source Structure
 
 ```text
 frontend/src/
 ├── components/
-├── features/
+│   ├── landing/
+│   ├── layout/
 │   ├── player/
-│   ├── rooms/
-│   ├── devices/
-│   └── permissions/
+│   └── room/
 ├── hooks/
 ├── services/
+│   ├── api/
+│   ├── websocket/
+│   └── youtube/
 ├── types/
-├── utils/
-└── App.tsx
+├── App.tsx
+└── main.tsx
 ```
+
+The frontend uses React hooks to manage player behavior and WebSocket synchronization.
+
+The STOMP client reconnects after temporary connection failures. Complete playback-state recovery after reconnection remains future work.
 
 ## 4. Backend Architecture
 
-Technology:
+### Technology
 
 - Java 21
-- Spring Boot
-- Spring Web
+- Spring Boot 4
+- Spring Web MVC
 - Spring WebSocket
 - Spring Validation
 - Spring Boot Actuator
+- Maven
 
-Responsibilities:
+### Responsibilities
 
-- Room management.
-- Device registration.
-- Host identification.
-- Controller authorization.
-- Follower management.
-- WebSocket communication.
+- Room creation and lifecycle management.
+- Device registration and authentication.
+- Device membership management.
+- Host authorization.
+- Playback permission management.
+- WebSocket connection authentication.
 - Playback command validation.
-- Authoritative playback state.
-- State versioning.
-- Reconnection handling.
-- Room cleanup.
+- Authoritative playback state management.
+- State version generation.
+- Broadcasting accepted playback updates.
 
-Suggested structure:
+### Current Source Structure
 
 ```text
 backend/src/main/java/com/framehost/
+├── common/
 ├── config/
-├── room/
 ├── device/
-├── permission/
 ├── playback/
-├── websocket/
-├── security/
-└── common/
+├── room/
+└── websocket/
 ```
 
-## 5. Device Roles
+The backend currently uses in-memory storage. Persistent database integration is not implemented.
+
+## 5. Device Roles and Permissions
+
+FrameHost defines three device roles.
 
 ### Host
 
-- Creates and closes rooms.
-- Selects videos.
-- Controls playback.
-- Manages connected devices.
-- Grants and revokes permissions.
-- Retains ultimate room authority.
+- Creates and ends rooms.
+- Has full playback control.
+- Views connected devices.
+- Removes connected devices.
+- Grants and revokes playback permissions.
+- Retains authority over room management.
 
 ### Controller
 
-- Controls playback when authorized.
-- Can request permitted video changes.
-- Cannot override host-only settings.
+- A defined device role in the backend.
+- Can perform playback actions when the required permission is granted.
+- Cannot perform Host-only room management operations.
+
+Automatic Controller assignment or role promotion is not currently implemented.
 
 ### Follower
 
 - Joins an existing room.
-- Watches synchronized playback.
-- Follows authoritative playback updates.
-- Can request controller access.
+- Receives room playback updates.
+- Can perform playback actions when the Host grants the corresponding permissions.
 
-## 6. Real-Time Communication
+### Playback Permissions
 
-WebSocket provides bidirectional communication between connected devices and the backend.
+The backend currently supports:
 
-The backend validates every command before updating the room state.
+| Permission   | Allowed actions          |
+| ------------ | ------------------------ |
+| PLAY_PAUSE   | Play and pause           |
+| SEEK         | Change playback position |
+| CHANGE_VIDEO | Select another video     |
 
-Main message categories:
+The Host always has full playback control. Non-Host devices must have the permission required for each command.
 
-### Room Events
+## 6. REST API Communication
 
-- CREATE_ROOM
-- JOIN_ROOM
-- LEAVE_ROOM
-- ROOM_STATE
-- ROOM_CLOSED
+REST APIs handle room and device management.
 
-### Playback Commands
+Current endpoints:
+
+| Method | Endpoint                                                           | Purpose                     |
+| ------ | ------------------------------------------------------------------ | --------------------------- |
+| POST   | `/api/v1/rooms`                                                    | Create a room               |
+| POST   | `/api/v1/rooms/{roomCode}/join`                                    | Join a room                 |
+| GET    | `/api/v1/rooms/{roomCode}/devices`                                 | Get connected devices       |
+| POST   | `/api/v1/rooms/{roomCode}/leave`                                   | Leave a room                |
+| DELETE | `/api/v1/rooms/{roomCode}/devices/{deviceId}`                      | Remove a device             |
+| DELETE | `/api/v1/rooms/{roomCode}`                                         | End a room                  |
+| PUT    | `/api/v1/rooms/{roomCode}/devices/{deviceId}/playback-permissions` | Update playback permissions |
+
+Room and device operations use device authentication tokens where required.
+
+## 7. Real-Time Communication
+
+FrameHost uses WebSocket with STOMP for real-time playback communication.
+
+### WebSocket Configuration
+
+- WebSocket endpoint: `/ws`
+- Application destination prefix: `/app`
+- Message broker prefix: `/topic`
+
+### Current Destinations
+
+Client sends playback commands to:
+
+```text
+/app/rooms/{roomCode}/playback
+```
+
+Clients subscribe to playback updates at:
+
+```text
+/topic/rooms/{roomCode}/playback
+```
+
+### Connection Authentication
+
+During the STOMP CONNECT frame, the frontend provides:
+
+- `roomCode`
+- `Authorization: Bearer <deviceToken>`
+
+The backend authenticates the device and associates its identity with the WebSocket session.
+
+The backend also restricts subscriptions and messages to the authenticated device's room.
+
+### Implemented Playback Commands
 
 - PLAY
 - PAUSE
 - SEEK
 - CHANGE_VIDEO
-- CHANGE_PLAYBACK_RATE
 
-### Device and Permission Events
+Playback-speed information can be included in supported command payloads, but a separate `CHANGE_PLAYBACK_RATE` command is not implemented.
 
-- DEVICE_CONNECTED
-- DEVICE_DISCONNECTED
-- ROLE_UPDATED
-- PERMISSION_GRANTED
-- PERMISSION_REVOKED
-- CONTROL_REQUESTED
+Room lifecycle and device management currently use REST APIs rather than the playback STOMP channel.
 
-### Synchronization Events
+## 8. Authoritative Playback State
 
-- SYNC_STATE
-- HEARTBEAT
-- STATE_CORRECTION
-- RECONNECT
+The backend stores an immutable playback state snapshot for each room.
 
-## 7. Authoritative Playback State
+Current state fields:
 
-The backend maintains the latest playback state for each room.
+| Field          | Description                    |
+| -------------- | ------------------------------ |
+| videoProvider  | Video provider                 |
+| videoId        | Selected video identifier      |
+| playbackStatus | PLAYING or PAUSED              |
+| currentTime    | Playback position in seconds   |
+| playbackRate   | Playback speed                 |
+| stateVersion   | Server-generated state version |
+| lastUpdatedAt  | Server update timestamp        |
 
-State fields:
+The state version starts at 1 and increments whenever the backend accepts a playback-state update.
 
-- roomId
-- videoProvider
-- videoId
-- playbackStatus
-- currentTime
-- playbackRate
-- hostDeviceId
-- lastUpdatedAt
-- stateVersion
+The backend broadcasts the updated state to the room's playback topic.
 
-Every accepted command updates the state version.
+The current state model does not contain `roomId` or `hostDeviceId`; room association is handled separately.
 
-Connected devices receive the latest accepted state.
+## 9. Playback Synchronization Flow
 
-## 8. Synchronization Strategy
+The current playback command flow:
 
-1. A device sends a playback command.
-2. Backend identifies the sender.
-3. Backend validates room membership.
-4. Backend checks role and permissions.
-5. Backend validates the command payload.
-6. Backend rejects invalid or outdated commands.
-7. Backend updates authoritative state.
-8. Backend increments stateVersion.
-9. Backend broadcasts the accepted state.
-10. Connected players synchronize.
+1. A connected device generates a playback command.
+2. The frontend sends it through STOMP.
+3. The backend authenticates the WebSocket session.
+4. The backend verifies room membership.
+5. The backend checks the device's current role.
+6. The backend validates the command payload.
+7. The backend checks the required playback permission.
+8. The backend updates the authoritative room state.
+9. The backend increments the state version.
+10. The backend broadcasts the updated state.
+11. Connected frontend players receive the update.
+12. Players apply the remote playback state.
 
-Small timing differences should be corrected without unnecessary seeking.
+The frontend ignores playback updates with invalid or outdated state versions.
 
-## 9. Conflict Resolution
+## 10. Conflict Resolution
 
-Multiple controllers may send commands close together.
+Multiple authorized devices may send commands close together.
 
-FrameHost uses server-side command ordering and state versioning.
+The backend serializes command validation and state updates using synchronization on the room object.
 
-Client timestamps are not trusted as the source of command order.
+State versions are generated by the backend, not supplied by clients.
 
-The host retains authority over room settings and device permissions.
+This provides server-side ordering for accepted state updates.
 
-## 10. Storage Strategy
+The current implementation does not yet provide a complete stale-command rejection protocol or distributed ordering across multiple backend instances.
 
-Initial MVP:
+## 11. Storage Strategy
 
-- In-memory room storage.
-- In-memory device and permission management.
-- No external database dependency.
+### Current Implementation
 
-A database can be introduced when persistent rooms, users or playback history become necessary.
+- In-memory room repository.
+- In-memory device registration.
+- In-memory authentication token hashes.
+- In-memory playback permissions.
+- In-memory playback state.
 
-## 11. Video Integration
+Room capacity is currently limited to 10 devices, including the Host.
+
+Device authentication tokens are stored as hashes rather than raw tokens.
+
+When a room ends, its device token hashes, playback permissions, and playback state are cleared.
+
+### Future Improvements
+
+- Persistent database integration.
+- Distributed room state.
+- Multi-instance WebSocket messaging.
+- Room expiration and cleanup.
+- Persistent user accounts, if required.
+
+## 12. YouTube Integration
 
 YouTube is the first supported video provider.
 
-Integration uses the official YouTube IFrame Player API.
+FrameHost uses the official YouTube IFrame Player API.
 
-The backend coordinates playback state and commands.
+The frontend controls the embedded YouTube player.
 
-It does not proxy, download or redistribute YouTube video streams.
+The backend coordinates playback commands and authoritative playback state.
 
-YouTube playback requires an internet connection.
+FrameHost does not proxy, download, or redistribute YouTube video streams.
 
-## 12. Future Architecture
+YouTube playback requires an internet connection and is subject to YouTube's platform requirements.
 
-After the YouTube MVP:
+## 13. Reliability and Recovery
+
+### Currently Implemented
+
+- STOMP automatic reconnect configuration.
+- WebSocket heartbeat configuration.
+- Connection status tracking.
+- Playback state version validation.
+- Cleanup of WebSocket connections when the room session changes.
+
+### Planned Improvements
+
+- Initial playback-state delivery to newly connected devices.
+- Playback-state recovery after reconnection.
+- Better handling of temporary network failures.
+- Periodic synchronization and drift correction.
+- Integration tests for multiple simultaneous devices.
+
+Automatic reconnection is configured, but reconnecting alone does not guarantee that a device receives the latest room state.
+
+## 14. Security Considerations
+
+Current security controls include:
+
+- Device authentication tokens.
+- Hashed token storage.
+- Authenticated WebSocket connections.
+- Room-specific WebSocket subscriptions.
+- Room-specific playback message destinations.
+- Host-only room management operations.
+- Host-controlled playback permissions.
+- Server-side command validation.
+- Device membership and role verification.
+
+Further production hardening is required, including deployment-specific origin configuration, secure transport, rate limiting, and broader security testing.
+
+## 15. Future Architecture
+
+Future development may introduce:
 
 - Local video playback.
 - Authorized local media access.
 - Progressive Web App support.
 - Local-network synchronization.
 - Offline playback for locally available videos.
+- Persistent storage.
+- Scalable real-time messaging.
 
-These capabilities are future milestones, not part of the initial implementation.
+These capabilities are future milestones and are not part of the current implementation.
+
+---
+
+**FrameHost — One Host. Every Screen. Total Control.**

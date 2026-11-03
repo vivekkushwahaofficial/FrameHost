@@ -1,127 +1,258 @@
-
 # FrameHost
 
 ### One Host. Every Screen. Total Control.
 
 FrameHost is an open-source, multi-device video synchronization and remote playback control platform.
 
-It allows users to synchronize video playback across multiple devices and control playback from any authorized connected device.
+It allows users to create a shared video room, connect multiple devices, and synchronize YouTube playback across authorized devices in real time.
 
-## Project Vision
+---
 
-Build a platform where one device hosts a video session, multiple devices join as viewers, and authorized devices can remotely control playback.
+## Project Overview
 
-Our initial focus is YouTube synchronization, followed by local video support and offline local-network playback.
+FrameHost enables one device to act as the **Host**, while other devices join the same room as **Controllers** or **Followers**.
 
-## Key Features
+The Host manages the room and controls which connected devices are allowed to perform playback actions.
 
-### Planned Features
+Our initial focus is synchronized YouTube playback. Future versions aim to support local video playback and offline synchronization over a local network.
 
-- Multi-device video synchronization
-- Host, Controller, and Follower roles
-- Real-time playback synchronization
-- Remote play and pause
-- Remote seeking and playback-speed control
-- Room creation and joining
-- Device management and permissions
-- Automatic reconnection and state recovery
-- YouTube video integration
-- Future local video and offline support
+## Current Features
 
-> Features are planned and will be implemented incrementally. They are not yet available in the initial repository.
+The following functionality has been implemented in the current development branch:
+
+- [x] Room creation and joining
+- [x] Host, Controller, and Follower roles
+- [x] Connected device management
+- [x] Host-controlled room lifecycle
+- [x] Device authentication using access tokens
+- [x] Real-time playback communication using WebSocket and STOMP
+- [x] YouTube IFrame Player API integration
+- [x] Remote Play and Pause
+- [x] Remote Seek
+- [x] Change YouTube video
+- [x] Individual playback permissions for connected devices
+- [x] Host-only permission management
+- [x] Frontend and backend integration
+
+## Planned Features
+
+These capabilities are part of the roadmap and are not yet considered complete:
+
+- [ ] Playback-speed controls
+- [ ] Automatic reconnection and playback state recovery
+- [ ] Initial playback-state synchronization for newly joined devices
+- [ ] Improved synchronization and drift correction
+- [ ] More comprehensive integration and end-to-end testing
+- [ ] Local video playback
+- [ ] Offline synchronization over a local network
+- [ ] Production deployment and monitoring
 
 ## Technology Stack
 
 ### Frontend
-- React
+
+- React 19
 - TypeScript
 - Vite
-- CSS
+- Tailwind CSS 4
+- STOMP.js
 - YouTube IFrame Player API
 
 ### Backend
+
 - Java 21
-- Spring Boot
-- Spring Web
+- Spring Boot 4
+- Spring Web MVC
 - Spring WebSocket
 - Spring Validation
 - Spring Boot Actuator
-
-### Development Tools
-- Visual Studio Code
 - Maven
-- Git and GitHub
-- Postman
+
+### Testing and Development Tools
+
 - JUnit 5
-- Vitest
-- React Testing Library
+- Maven
+- ESLint
+- Vitest and React Testing Library (planned for frontend test coverage)
+- Postman
+- Visual Studio Code
+- Git and GitHub
 
 ## Architecture
 
 FrameHost follows a frontend-backend architecture.
 
 ```text
-           FrameHost
-               |
-       +-------+-------+
-       |               |
-    Frontend         Backend
-    React            Spring Boot
-       |               |
-       +------ WebSocket
-               |
-        Authoritative
-         Room State
-               |
-       +-------+-------+
-       |       |       |
-      Host  Controller Follower
+                 FrameHost
+                     |
+           +---------+---------+
+           |                   |
+        Frontend             Backend
+        React                Spring Boot
+           |                   |
+           +---- WebSocket ----+
+                     |
+              Room Playback
+                   State
+                     |
+          +----------+----------+
+          |          |          |
+         Host    Controller  Follower
 ```
+
+The backend maintains authoritative room and playback state. Connected devices communicate with the backend through authenticated WebSocket connections.
+
+The Host controls room-level operations and manages playback permissions for other devices.
 
 ## Project Structure
 
 ```text
 FrameHost/
 ├── frontend/
+│   ├── src/
+│   │   ├── components/
+│   │   ├── hooks/
+│   │   ├── services/
+│   │   └── types/
+│   ├── package.json
+│   └── .env.example
+│
 ├── backend/
+│   ├── src/
+│   │   ├── main/
+│   │   └── test/
+│   ├── pom.xml
+│   └── mvnw
+│
 ├── docs/
-│   ├── ARCHITECTURE.md
-│   ├── PROJECT_STATUS.md
-│   └── DECISIONS.md
 ├── .github/
 ├── .gitignore
 ├── LICENSE
 └── README.md
 ```
 
+## Getting Started
+
+### Prerequisites
+
+Install the following tools:
+
+- Java 21
+- Node.js and npm
+- Git
+- A modern web browser
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/vivekkushwahaofficial/FrameHost.git
+
+cd FrameHost
+```
+
+### 2. Start the backend
+
+Open a terminal:
+
+```bash
+cd backend
+```
+
+On Windows:
+
+```bash
+mvnw.cmd spring-boot:run
+```
+
+On Linux or macOS:
+
+```bash
+./mvnw spring-boot:run
+```
+
+The backend runs on:
+
+```text
+http://localhost:8080
+```
+
+### 3. Start the frontend
+
+Open another terminal from the project root:
+
+```bash
+cd frontend
+npm install
+```
+
+Create a `.env` file using `.env.example` as a reference.
+
+The local WebSocket configuration is:
+
+```env
+VITE_WS_URL=ws://localhost:8080/ws
+```
+
+Start the development server:
+
+```bash
+npm run dev
+```
+
+Open:
+
+```text
+http://localhost:5173
+```
+
+### 4. Validate the frontend
+
+```bash
+npm run build
+npm run lint
+```
+
+### 5. Validate the backend
+
+From the backend directory:
+
+```bash
+mvnw.cmd clean verify
+```
+
 ## Development Roadmap
 
-- [ ] Phase 0: Project initialization
-- [ ] Phase 1: YouTube player
-- [ ] Phase 2: Backend and room management
-- [ ] Phase 3: Host and follower synchronization
-- [ ] Phase 4: Multi-device remote control
-- [ ] Phase 5: Multi-device reliability
-- [ ] Phase 6: Local video support
-- [ ] Phase 7: Offline mode
-- [ ] Phase 8: Production hardening
+| Phase | Description                                 | Status                          |
+| ----- | ------------------------------------------- | ------------------------------- |
+| 0     | Project initialization                      | Complete                        |
+| 1     | YouTube player integration                  | Complete                        |
+| 2     | Backend and room management                 | Complete                        |
+| 3     | Host and Follower synchronization           | Initial implementation complete |
+| 4     | Multi-device remote control and permissions | Initial implementation complete |
+| 5     | Multi-device reliability and recovery       | In progress                     |
+| 6     | Local video support                         | Planned                         |
+| 7     | Offline local-network mode                  | Planned                         |
+| 8     | Production hardening                        | Planned                         |
 
 ## Development Philosophy
 
-- Clean and maintainable code
+- Clean, maintainable, and readable code
 - Security-first architecture
-- Real-time communication
+- Reliable real-time communication
 - Minimal dependencies
 - Zero mandatory paid infrastructure
 - Incremental development and testing
+- No unnecessary rewrites of working functionality
 
-## Getting Started
+## Contribution
 
-Development setup instructions will be added as the frontend and backend implementations are initialized.
+Contributions, suggestions, and bug reports are welcome.
+
+Please open an issue before starting significant changes. Feature branches should be created from `develop`, and changes should be submitted through pull requests.
 
 ## License
 
-This project is licensed under the Apache License 2.0.
+FrameHost is licensed under the Apache License 2.0.
 
 See the [LICENSE](LICENSE) file for details.
 
