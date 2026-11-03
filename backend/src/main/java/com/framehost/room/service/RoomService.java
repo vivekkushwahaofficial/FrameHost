@@ -146,13 +146,15 @@ public class RoomService {
 
         requireHost(authenticatedDevice);
 
+        // Return device information along with its current permissions.
         return room.getDevices()
                 .stream()
                 .map(device -> new DeviceResponse(
                         device.deviceId(),
                         device.deviceName(),
                         device.role(),
-                        device.joinedAt()
+                        device.joinedAt(),
+                        room.getPlaybackPermissions(device.deviceId())
                 ))
                 .toList();
     }
