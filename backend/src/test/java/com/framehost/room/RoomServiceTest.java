@@ -1,9 +1,13 @@
 package com.framehost.room;
 
+import java.time.Instant;
+import java.util.Optional;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -11,11 +15,18 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.framehost.common.AuthenticationException;
+import com.framehost.common.AuthorizationException;
+import com.framehost.device.Device;
+import com.framehost.device.DeviceRole;
 import com.framehost.device.service.DeviceAuthenticationService;
 import com.framehost.device.service.DeviceTokenService;
+import com.framehost.room.dto.EndRoomResponse;
 import com.framehost.room.model.Room;
+import com.framehost.room.model.RoomStatus;
 import com.framehost.room.repository.InMemoryRoomRepository;
 import com.framehost.room.service.RoomCodeGenerator;
+import com.framehost.room.service.RoomNotFoundException;
 import com.framehost.room.service.RoomService;
 
 class RoomServiceTest {
@@ -33,14 +44,12 @@ class RoomServiceTest {
         deviceTokenService = mock(DeviceTokenService.class);
         authenticationService = mock(DeviceAuthenticationService.class);
 
-        // Configure a predictable token for testing.
         when(deviceTokenService.generateToken())
                 .thenReturn("test-host-token");
 
         when(deviceTokenService.hashToken("test-host-token"))
                 .thenReturn("hashed-host-token");
 
-        // Create the service with all required dependencies.
         roomService = new RoomService(
                 repository,
                 codeGenerator,
@@ -53,21 +62,17 @@ class RoomServiceTest {
     void shouldCreateRoomSuccessfully() {
         initializeTestData();
 
-        // Configure room creation dependencies.
         when(codeGenerator.generate()).thenReturn("ABC123");
         when(repository.saveIfAbsent(any(Room.class))).thenReturn(true);
 
-        // Execute room creation.
         var response = roomService.createRoom();
 
-        // Verify the returned room information.
         assertEquals("ABC123", response.roomCode());
         assertNotNull(response.hostDeviceId());
         assertEquals("test-host-token", response.deviceToken());
         assertNotNull(response.createdAt());
         assertEquals(1, response.deviceCount());
 
-        // Verify repository and token service interactions.
         verify(repository).saveIfAbsent(any(Room.class));
         verify(deviceTokenService).generateToken();
         verify(deviceTokenService).hashToken("test-host-token");
@@ -77,20 +82,16 @@ class RoomServiceTest {
     void shouldRetryWhenRoomCodeAlreadyExists() {
         initializeTestData();
 
-        // Return a duplicate code first, followed by a unique code.
         when(codeGenerator.generate())
                 .thenReturn("ABC123")
                 .thenReturn("DEF456");
 
-        // First save fails; second save succeeds.
         when(repository.saveIfAbsent(any(Room.class)))
                 .thenReturn(false)
                 .thenReturn(true);
 
-        // Execute room creation.
         var response = roomService.createRoom();
 
-        // Verify the successful attempt.
         assertEquals("DEF456", response.roomCode());
         assertEquals("test-host-token", response.deviceToken());
 
@@ -102,13 +103,9 @@ class RoomServiceTest {
     void shouldFailAfterMaximumGenerationAttempts() {
         initializeTestData();
 
-        // Always return the same room code.
         when(codeGenerator.generate()).thenReturn("ABC123");
-
-        // Simulate room code collisions.
         when(repository.saveIfAbsent(any(Room.class))).thenReturn(false);
 
-        // Verify that creation eventually fails.
         IllegalStateException exception = assertThrows(
                 IllegalStateException.class,
                 () -> roomService.createRoom()
@@ -119,5 +116,201 @@ class RoomServiceTest {
 
         verify(codeGenerator, times(5)).generate();
         verify(repository, times(5)).saveIfAbsent(any(Room.class));
+    }
+
+    @Test
+    void shouldAllowHostToEndActiveRoom() {
+        initializeTestData();
+
+        Room room = new Room("ABC123", Instant.now());
+
+        Device host = new Device(
+                "host-id",
+                "Host Device",
+                DeviceRole.HOST,
+                Instant.now()
+        );
+
+        room.addDevice(host, "hashed-host-token");
+
+        when(repository.findByRoomCode("ABC123"))
+                .thenReturn(Optional.of(room));
+
+        when(authenticationService.authenticate(
+                room,
+                "Bearer test-host-token"
+        )).thenReturn(host);
+
+        EndRoomResponse response = roomService.endRoom(
+                "ABC123",
+                "Bearer test-host-token"
+        );
+
+        assertEquals("ABC123", response.roomCode());
+        assertEquals(RoomStatus.ENDED, response.status());
+        assertNotNull(response.endedAt());
+        assertEquals("Room ended successfully.", response.message());
+
+        assertFalse(room.isActive());
+
+        verify(authenticationService).authenticate(
+                room,
+                "Bearer test-host-token"
+        );
+    }
+
+    @Test
+    void shouldPreventFollowerFromEndingRoom() {
+        initializeTestData();
+
+        Room room = new Room("ABC123", Instant.now());
+
+        Device follower = new Device(
+                "follower-id",
+                "Follower Device",
+                DeviceRole.FOLLOWER,
+                Instant.now()
+        );
+
+        room.addDevice(follower, "hashed-follower-token");
+
+        when(repository.findByRoomCode("ABC123"))
+                .thenReturn(Optional.of(room));
+
+        when(authenticationService.authenticate(
+                room,
+                "Bearer follower-token"
+        )).thenReturn(follower);
+
+        AuthorizationException exception = assertThrows(
+                AuthorizationException.class,
+                () -> roomService.endRoom(
+                        "ABC123",
+                        "Bearer follower-token"
+                )
+        );
+
+        assertNotNull(exception);
+        assertEquals(RoomStatus.ACTIVE, room.status());
+        assertTrue(room.isActive());
+    }
+
+    @Test
+    void shouldRejectEndingAnAlreadyEndedRoomWhenAuthenticationFails() {
+        initializeTestData();
+
+        Room room = createRoomWithHost();
+
+        // End the room, which revokes its stored device tokens.
+        room.end();
+
+        when(repository.findByRoomCode("ABC123"))
+                .thenReturn(Optional.of(room));
+
+        // The authentication service rejects the revoked Host token.
+        when(authenticationService.authenticate(
+                room,
+                "Bearer test-host-token"
+        )).thenThrow(new AuthenticationException());
+
+        AuthenticationException exception = assertThrows(
+                AuthenticationException.class,
+                () -> roomService.endRoom(
+                        "ABC123",
+                        "Bearer test-host-token"
+                )
+        );
+
+        assertNotNull(exception);
+
+        // Authentication must happen before checking the room status.
+        verify(authenticationService).authenticate(
+                room,
+                "Bearer test-host-token"
+        );
+
+        assertEquals(RoomStatus.ENDED, room.status());
+        assertFalse(room.isActive());
+    }
+
+    @Test
+    void shouldRejectEndingRoomWhenAuthenticationIsMissing() {
+        initializeTestData();
+
+        Room room = createRoomWithHost();
+
+        when(repository.findByRoomCode("ABC123"))
+                .thenReturn(Optional.of(room));
+
+        when(authenticationService.authenticate(room, null))
+                .thenThrow(new AuthenticationException());
+
+        AuthenticationException exception = assertThrows(
+                AuthenticationException.class,
+                () -> roomService.endRoom("ABC123", null)
+        );
+
+        assertNotNull(exception);
+        assertTrue(room.isActive());
+    }
+
+    @Test
+    void shouldRejectEndingRoomWhenTokenIsInvalid() {
+        initializeTestData();
+
+        Room room = createRoomWithHost();
+
+        when(repository.findByRoomCode("ABC123"))
+                .thenReturn(Optional.of(room));
+
+        when(authenticationService.authenticate(
+                room,
+                "Bearer invalid-token"
+        )).thenThrow(new AuthenticationException());
+
+        AuthenticationException exception = assertThrows(
+                AuthenticationException.class,
+                () -> roomService.endRoom(
+                        "ABC123",
+                        "Bearer invalid-token"
+                )
+        );
+
+        assertNotNull(exception);
+        assertTrue(room.isActive());
+    }
+
+    @Test
+    void shouldThrowExceptionWhenEndingNonexistentRoom() {
+        initializeTestData();
+
+        when(repository.findByRoomCode("UNKNOWN"))
+                .thenReturn(Optional.empty());
+
+        RoomNotFoundException exception = assertThrows(
+                RoomNotFoundException.class,
+                () -> roomService.endRoom(
+                        "UNKNOWN",
+                        "Bearer test-host-token"
+                )
+        );
+
+        assertNotNull(exception);
+    }
+
+    // Creates an active room containing a Host with a known token hash.
+    private Room createRoomWithHost() {
+        Room room = new Room("ABC123", Instant.now());
+
+        Device host = new Device(
+                "host-id",
+                "Host Device",
+                DeviceRole.HOST,
+                Instant.now()
+        );
+
+        room.addDevice(host, "hashed-host-token");
+
+        return room;
     }
 }

@@ -18,6 +18,12 @@ public class Room {
     private final String roomCode;
     private final Instant createdAt;
 
+    // Stores the current room lifecycle state.
+    private RoomStatus status = RoomStatus.ACTIVE;
+
+    // Records when the room was terminated.
+    private Instant endedAt;
+
     // Stores public device information.
     private final ConcurrentHashMap<String, Device> devices
             = new ConcurrentHashMap<>();
@@ -39,11 +45,44 @@ public class Room {
         return createdAt;
     }
 
+    // Returns the current lifecycle state.
+    public synchronized RoomStatus status() {
+        return status;
+    }
+
+    // Returns the room termination timestamp.
+    public synchronized Instant endedAt() {
+        return endedAt;
+    }
+
+    // Checks whether the room accepts normal operations.
+    public synchronized boolean isActive() {
+        return status == RoomStatus.ACTIVE;
+    }
+
+    // Ends the room and invalidates all device credentials.
+    public synchronized boolean end() {
+
+        // Prevent repeated or invalid lifecycle transitions.
+        if (status != RoomStatus.ACTIVE) {
+            return false;
+        }
+
+        status = RoomStatus.ENDED;
+        endedAt = Instant.now();
+
+        // Revoke every registered device token.
+        deviceTokenHashes.clear();
+
+        return true;
+    }
+
     // Retains the original method for internal use and test fixtures.
-    // Devices added this way do not receive authentication credentials.
     public synchronized boolean addDevice(Device device) {
 
-        if (device == null || devices.size() >= MAX_DEVICES) {
+        if (!isActive()
+                || device == null
+                || devices.size() >= MAX_DEVICES) {
             return false;
         }
 
@@ -57,13 +96,13 @@ public class Room {
     }
 
     // Adds a device and its authentication token hash atomically.
-    // Production room creation and joining must use this method.
     public synchronized boolean addDevice(
             Device device,
             String tokenHash
     ) {
 
-        if (device == null
+        if (!isActive()
+                || device == null
                 || tokenHash == null
                 || tokenHash.isBlank()
                 || devices.size() >= MAX_DEVICES) {
@@ -88,16 +127,18 @@ public class Room {
     // Finds a device using its hashed authentication token.
     public synchronized Device findDeviceByTokenHash(String tokenHash) {
 
-        if (tokenHash == null) {
+        // Ended rooms cannot authenticate devices.
+        if (!isActive() || tokenHash == null) {
             return null;
         }
 
-        byte[] suppliedHash = tokenHash.getBytes(StandardCharsets.UTF_8);
+        byte[] suppliedHash
+                = tokenHash.getBytes(StandardCharsets.UTF_8);
 
         for (var entry : deviceTokenHashes.entrySet()) {
 
-            byte[] storedHash = entry.getValue()
-                    .getBytes(StandardCharsets.UTF_8);
+            byte[] storedHash
+                    = entry.getValue().getBytes(StandardCharsets.UTF_8);
 
             if (MessageDigest.isEqual(suppliedHash, storedHash)) {
                 return devices.get(entry.getKey());
@@ -109,6 +150,10 @@ public class Room {
 
     // Removes a device but never allows removal of the Host.
     public synchronized Device removeDevice(String deviceId) {
+
+        if (!isActive()) {
+            return null;
+        }
 
         Device device = devices.get(deviceId);
 
@@ -123,6 +168,10 @@ public class Room {
 
     // Allows an authenticated non-Host device to leave.
     public synchronized Device removeOwnDevice(String deviceId) {
+
+        if (!isActive()) {
+            return null;
+        }
 
         Device device = devices.get(deviceId);
 

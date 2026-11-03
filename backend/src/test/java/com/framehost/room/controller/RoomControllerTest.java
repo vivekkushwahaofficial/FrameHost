@@ -24,6 +24,8 @@ import com.framehost.device.DeviceRole;
 import com.framehost.device.dto.DeviceManagementResponse;
 import com.framehost.device.dto.DeviceResponse;
 import com.framehost.device.service.DeviceNotFoundException;
+import com.framehost.room.dto.EndRoomResponse;
+import com.framehost.room.model.RoomStatus;
 import com.framehost.room.service.RoomOperationConflictException;
 import com.framehost.room.service.RoomService;
 
@@ -104,13 +106,12 @@ class RoomControllerTest {
     @Test
     void shouldAllowFollowerToLeaveRoom() throws Exception {
 
-        DeviceManagementResponse response
-                = new DeviceManagementResponse(
-                        ROOM_CODE,
-                        "device-2",
-                        "Device left successfully",
-                        1
-                );
+        DeviceManagementResponse response = new DeviceManagementResponse(
+                ROOM_CODE,
+                "device-2",
+                "Device left successfully",
+                1
+        );
 
         when(roomService.leaveRoom(ROOM_CODE, FOLLOWER_AUTH))
                 .thenReturn(response);
@@ -144,13 +145,12 @@ class RoomControllerTest {
     @Test
     void shouldAllowHostToRemoveFollower() throws Exception {
 
-        DeviceManagementResponse response
-                = new DeviceManagementResponse(
-                        ROOM_CODE,
-                        "device-2",
-                        "Device removed successfully",
-                        1
-                );
+        DeviceManagementResponse response = new DeviceManagementResponse(
+                ROOM_CODE,
+                "device-2",
+                "Device removed successfully",
+                1
+        );
 
         when(roomService.removeDevice(
                 ROOM_CODE,
@@ -211,5 +211,78 @@ class RoomControllerTest {
         )
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status").value(404));
+    }
+
+    // Host should successfully end an active room.
+    @Test
+    void shouldAllowHostToEndRoom() throws Exception {
+
+        EndRoomResponse response = new EndRoomResponse(
+                ROOM_CODE,
+                RoomStatus.ENDED,
+                Instant.parse("2026-11-03T00:00:00Z"),
+                "Room ended successfully."
+        );
+
+        when(roomService.endRoom(ROOM_CODE, HOST_AUTH))
+                .thenReturn(response);
+
+        mockMvc.perform(
+                delete("/api/v1/rooms/{roomCode}", ROOM_CODE)
+                        .header("Authorization", HOST_AUTH)
+                        .accept(MediaType.APPLICATION_JSON)
+        )
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.roomCode").value(ROOM_CODE))
+                .andExpect(jsonPath("$.status").value("ENDED"))
+                .andExpect(jsonPath("$.endedAt").exists())
+                .andExpect(jsonPath("$.message")
+                        .value("Room ended successfully."));
+    }
+
+    // Missing authentication should return HTTP 401.
+    @Test
+    void shouldReturn401WhenHostAuthenticationIsMissing() throws Exception {
+
+        when(roomService.endRoom(ROOM_CODE, null))
+                .thenThrow(new AuthenticationException());
+
+        mockMvc.perform(
+                delete("/api/v1/rooms/{roomCode}", ROOM_CODE)
+        )
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.status").value(401))
+                .andExpect(jsonPath("$.message").exists());
+    }
+
+    // Follower should not be allowed to end a room.
+    @Test
+    void shouldReturn403WhenFollowerAttemptsToEndRoom() throws Exception {
+
+        when(roomService.endRoom(ROOM_CODE, FOLLOWER_AUTH))
+                .thenThrow(new AuthorizationException("Host access required"));
+
+        mockMvc.perform(
+                delete("/api/v1/rooms/{roomCode}", ROOM_CODE)
+                        .header("Authorization", FOLLOWER_AUTH)
+        )
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.status").value(403));
+    }
+
+    // A revoked Host token must return HTTP 401 after room termination.
+    @Test
+    void shouldReturn401WhenHostTokenIsRevokedAfterRoomEnds() throws Exception {
+
+        when(roomService.endRoom(ROOM_CODE, HOST_AUTH))
+                .thenThrow(new AuthenticationException());
+
+        mockMvc.perform(
+                delete("/api/v1/rooms/{roomCode}", ROOM_CODE)
+                        .header("Authorization", HOST_AUTH)
+        )
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.status").value(401))
+                .andExpect(jsonPath("$.message").exists());
     }
 }
