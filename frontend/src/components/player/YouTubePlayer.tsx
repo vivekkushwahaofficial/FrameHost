@@ -137,14 +137,36 @@ function YouTubePlayer({
     loadVideo(videoId);
   }
 
-  return (
-    <section className="mx-auto w-full max-w-5xl px-4 py-12 sm:px-6">
-      <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
-        <div className="mb-5">
-          <h2 className="text-xl font-bold text-gray-900">FrameHost Player</h2>
+  // Playback status presentation.
+  const playbackStatus =
+    playerState === 1
+      ? "Playing"
+      : playerState === 2
+        ? "Paused"
+        : playerState === 3
+          ? "Buffering"
+          : "Not playing";
 
-          <p className="mt-1 text-sm text-gray-500">
-            Load a YouTube video and control playback.
+  const isConnected = connectionStatus === "CONNECTED";
+
+  const isConnecting =
+    connectionStatus === "CONNECTING" || connectionStatus === "RECONNECTING";
+
+  return (
+    <section className="mx-auto w-full max-w-5xl px-4 py-10 transition-colors duration-300 sm:px-6 sm:py-12">
+      <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-[#111C30] dark:shadow-xl dark:shadow-black/10 sm:p-6 md:p-8">
+        {/* Player heading */}
+        <div className="mb-6">
+          <span className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] text-blue-700 dark:border-blue-400/20 dark:bg-blue-500/10 dark:text-blue-400">
+            Shared playback
+          </span>
+
+          <h2 className="mt-4 text-xl font-bold tracking-tight text-gray-900 dark:text-slate-50 sm:text-2xl">
+            FrameHost Player
+          </h2>
+
+          <p className="mt-2 text-sm leading-6 text-gray-500 dark:text-slate-400">
+            Load a YouTube video and control playback across connected devices.
           </p>
         </div>
 
@@ -161,48 +183,57 @@ function YouTubePlayer({
               setInputError(null);
             }}
             placeholder="Paste YouTube URL or video ID"
-            className="min-w-0 flex-1 rounded-lg border border-gray-300 px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            aria-label="YouTube video URL or ID"
+            className="min-w-0 flex-1 rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition-all placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-400 dark:focus:ring-blue-500/10"
           />
 
           <button
             type="submit"
             disabled={!isReady}
-            className="rounded-lg bg-blue-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white shadow-sm shadow-blue-600/20 transition-colors hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-blue-500 dark:hover:bg-blue-400 dark:focus-visible:outline-blue-400"
           >
             Load Video
           </button>
         </form>
 
+        {/* Input validation error */}
         {inputError && (
-          <p className="mb-4 text-sm text-red-600" role="alert">
+          <p
+            className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300"
+            role="alert"
+          >
             {inputError}
           </p>
         )}
 
         {/* YouTube player container */}
-        <div className="relative aspect-video overflow-hidden rounded-xl bg-black">
+        <div className="relative aspect-video overflow-hidden rounded-xl border border-gray-200 bg-black dark:border-slate-700">
           <div ref={containerRef} className="h-full w-full" />
 
           {!isReady && (
-            <div className="absolute inset-0 flex items-center justify-center bg-gray-950 text-sm text-white">
+            <div className="absolute inset-0 flex items-center justify-center bg-gray-950 text-sm text-slate-300">
               Initializing YouTube player...
             </div>
           )}
         </div>
 
+        {/* Player error */}
         {error && (
-          <p className="mt-3 text-sm text-red-600" role="alert">
+          <p
+            className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300"
+            role="alert"
+          >
             {error}
           </p>
         )}
 
         {/* Playback controls */}
-        <div className="mt-5 flex flex-wrap items-center gap-3">
+        <div className="mt-6 flex flex-wrap items-center gap-3">
           <button
             type="button"
             onClick={play}
             disabled={!isReady}
-            className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+            className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-blue-500 dark:hover:bg-blue-400 dark:focus-visible:outline-blue-400"
           >
             Play
           </button>
@@ -211,37 +242,36 @@ function YouTubePlayer({
             type="button"
             onClick={pause}
             disabled={!isReady}
-            className="rounded-lg border border-gray-300 px-5 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            className="rounded-xl border border-gray-300 bg-white px-5 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:focus-visible:outline-blue-400"
           >
             Pause
           </button>
 
-          <span className="text-sm text-gray-500">
-            {playerState === 1
-              ? "Playing"
-              : playerState === 2
-                ? "Paused"
-                : playerState === 3
-                  ? "Buffering"
-                  : "Not playing"}
+          <span
+            className="ml-1 text-sm font-medium text-gray-600 dark:text-slate-300"
+            aria-live="polite"
+          >
+            {playbackStatus}
           </span>
         </div>
 
         {/* WebSocket connection status */}
-        <div className="mb-4 mt-3 flex items-center gap-2 text-sm">
+        <div className="mb-4 mt-5 flex flex-wrap items-center gap-2">
           <span
-            className={`h-2.5 w-2.5 rounded-full ${
-              connectionStatus === "CONNECTED"
-                ? "bg-green-500"
-                : connectionStatus === "CONNECTING" ||
-                    connectionStatus === "RECONNECTING"
-                  ? "bg-yellow-500"
-                  : "bg-gray-400"
+            className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+              isConnected
+                ? "bg-green-500 dark:bg-emerald-400"
+                : isConnecting
+                  ? "animate-pulse bg-yellow-500 dark:bg-amber-400"
+                  : "bg-gray-400 dark:bg-slate-500"
             }`}
           />
 
-          <span className="text-gray-600">
-            {connectionStatus === "CONNECTED"
+          <span
+            className="text-sm text-gray-600 dark:text-slate-300"
+            aria-live="polite"
+          >
+            {isConnected
               ? "Connected to room"
               : connectionStatus === "CONNECTING"
                 ? "Connecting..."
@@ -251,14 +281,18 @@ function YouTubePlayer({
           </span>
         </div>
 
+        {/* Synchronization error */}
         {syncError && (
-          <p className="mb-4 text-sm text-red-600" role="alert">
+          <p
+            className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300"
+            role="alert"
+          >
             {syncError}
           </p>
         )}
 
         {/* Playback timeline */}
-        <div className="mt-5">
+        <div className="mt-6 border-t border-gray-100 pt-5 dark:border-slate-800">
           <input
             type="range"
             min={0}
@@ -269,11 +303,11 @@ function YouTubePlayer({
             onChange={(event) => {
               seekTo(Number(event.target.value));
             }}
-            className="w-full cursor-pointer accent-blue-600 disabled:cursor-not-allowed"
+            className="w-full cursor-pointer accent-blue-600 disabled:cursor-not-allowed dark:accent-blue-400"
             aria-label="Video playback position"
           />
 
-          <div className="flex justify-between text-xs text-gray-500">
+          <div className="mt-2 flex justify-between text-xs font-medium tabular-nums text-gray-500 dark:text-slate-400">
             <span>{formatTime(currentTime)}</span>
             <span>{formatTime(duration)}</span>
           </div>
