@@ -49,6 +49,7 @@ function Footer() {
                 <span className="text-blue-600 dark:text-blue-400">.</span>
               </span>
             </a>
+
             <p className="mt-4 max-w-sm text-sm leading-7 text-gray-600 dark:text-slate-300">
               Watch YouTube together across multiple devices. Create a room,
               connect your devices, and stay synchronized throughout the viewing
@@ -133,6 +134,13 @@ function Footer() {
                   className={footerLinkClass}
                 >
                   Report an issue ↗
+                </a>
+              </li>
+
+              {/* Platform statistics link */}
+              <li>
+                <a href="/stats" className={footerLinkClass}>
+                  View Statistics →
                 </a>
               </li>
             </ul>
