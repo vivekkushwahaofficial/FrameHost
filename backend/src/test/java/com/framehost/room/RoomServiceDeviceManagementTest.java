@@ -14,6 +14,7 @@ import org.junit.jupiter.api.function.Executable;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.framehost.analytics.service.AnalyticsService;
 import com.framehost.common.AuthenticationException;
 import com.framehost.common.AuthorizationException;
 import com.framehost.device.Device;
@@ -84,7 +85,8 @@ class RoomServiceDeviceManagementTest {
                 repository,
                 mock(RoomCodeGenerator.class),
                 tokenService,
-                authenticationService
+                authenticationService,
+                mock(AnalyticsService.class)
         );
 
         hostAuthorization = "Bearer " + HOST_TOKEN;

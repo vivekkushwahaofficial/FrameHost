@@ -14,6 +14,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.framehost.analytics.service.AnalyticsService;
 import com.framehost.device.Device;
 import com.framehost.device.DeviceRole;
 import com.framehost.device.service.DeviceAuthenticationService;
@@ -56,7 +57,8 @@ class RoomJoinServiceTest {
                 repository,
                 codeGenerator,
                 deviceTokenService,
-                authenticationService
+                authenticationService,
+                mock(AnalyticsService.class)
         );
 
         // Create a room with an existing Host.

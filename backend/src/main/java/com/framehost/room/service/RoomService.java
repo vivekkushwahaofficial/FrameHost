@@ -6,6 +6,7 @@ import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 
+import com.framehost.analytics.service.AnalyticsService;
 import com.framehost.common.AuthorizationException;
 import com.framehost.device.Device;
 import com.framehost.device.DeviceRole;
@@ -31,18 +32,21 @@ public class RoomService {
     private final RoomCodeGenerator roomCodeGenerator;
     private final DeviceTokenService deviceTokenService;
     private final DeviceAuthenticationService authenticationService;
+    private final AnalyticsService analyticsService;
 
     // Constructor injection.
     public RoomService(
             InMemoryRoomRepository roomRepository,
             RoomCodeGenerator roomCodeGenerator,
             DeviceTokenService deviceTokenService,
-            DeviceAuthenticationService authenticationService
+            DeviceAuthenticationService authenticationService,
+            AnalyticsService analyticsService
     ) {
         this.roomRepository = roomRepository;
         this.roomCodeGenerator = roomCodeGenerator;
         this.deviceTokenService = deviceTokenService;
         this.authenticationService = authenticationService;
+        this.analyticsService = analyticsService;
     }
 
     // Creates a room and registers its creator as Host.
@@ -72,6 +76,9 @@ public class RoomService {
             }
 
             if (roomRepository.saveIfAbsent(room)) {
+
+                // Record analytics only after successful room creation.
+                analyticsService.recordRoomCreatedSafely();
 
                 return new CreateRoomResponse(
                         room.roomCode(),
