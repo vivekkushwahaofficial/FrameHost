@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 import Navbar from "./components/layout/Navbar";
 import Footer from "./components/layout/Footer";
-
+import StatsPage from "./pages/StatsPage";
 import Hero from "./components/landing/Hero";
 import HowItWorks from "./components/landing/HowItWorks";
 import DeviceRoles from "./components/landing/DeviceRoles";
@@ -39,7 +39,7 @@ interface RoomSessionData {
   maxDevices: number;
 }
 
-function App() {
+function FrameHostApp() {
   const [accessMode, setAccessMode] = useState<AccessMode | null>(null);
 
   const [roomSession, setRoomSession] = useState<RoomSessionData | null>(null);
@@ -328,6 +328,13 @@ function App() {
 
       <Footer />
     </>
+  );
+}
+function App() {
+  return window.location.pathname === "/stats" ? (
+    <StatsPage />
+  ) : (
+    <FrameHostApp />
   );
 }
 
