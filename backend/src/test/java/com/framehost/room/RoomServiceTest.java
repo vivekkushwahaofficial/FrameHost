@@ -11,10 +11,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.framehost.analytics.service.AnalyticsService;
 import com.framehost.common.AuthenticationException;
 import com.framehost.common.AuthorizationException;
 import com.framehost.device.Device;
@@ -35,6 +37,7 @@ class RoomServiceTest {
     private RoomCodeGenerator codeGenerator;
     private DeviceTokenService deviceTokenService;
     private DeviceAuthenticationService authenticationService;
+    private AnalyticsService analyticsService;
     private RoomService roomService;
 
     // Initialize fresh mocks and the service for each test.
@@ -43,6 +46,7 @@ class RoomServiceTest {
         codeGenerator = mock(RoomCodeGenerator.class);
         deviceTokenService = mock(DeviceTokenService.class);
         authenticationService = mock(DeviceAuthenticationService.class);
+        analyticsService = mock(AnalyticsService.class);
 
         when(deviceTokenService.generateToken())
                 .thenReturn("test-host-token");
@@ -54,7 +58,8 @@ class RoomServiceTest {
                 repository,
                 codeGenerator,
                 deviceTokenService,
-                authenticationService
+                authenticationService,
+                analyticsService
         );
     }
 
@@ -72,7 +77,8 @@ class RoomServiceTest {
         assertEquals("test-host-token", response.deviceToken());
         assertNotNull(response.createdAt());
         assertEquals(1, response.deviceCount());
-
+        verify(analyticsService, times(1))
+                .recordRoomCreatedSafely();
         verify(repository).saveIfAbsent(any(Room.class));
         verify(deviceTokenService).generateToken();
         verify(deviceTokenService).hashToken("test-host-token");
@@ -94,7 +100,9 @@ class RoomServiceTest {
 
         assertEquals("DEF456", response.roomCode());
         assertEquals("test-host-token", response.deviceToken());
-
+        // Only one successful room creation should produce one event.
+        verify(analyticsService, times(1))
+                .recordRoomCreatedSafely();
         verify(codeGenerator, times(2)).generate();
         verify(repository, times(2)).saveIfAbsent(any(Room.class));
     }
@@ -113,7 +121,8 @@ class RoomServiceTest {
 
         assertNotNull(exception.getMessage());
         assertFalse(exception.getMessage().isBlank());
-
+        verify(analyticsService, never())
+                .recordRoomCreatedSafely();
         verify(codeGenerator, times(5)).generate();
         verify(repository, times(5)).saveIfAbsent(any(Room.class));
     }
