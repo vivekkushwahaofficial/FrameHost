@@ -15,10 +15,14 @@ import com.framehost.device.dto.DeviceResponse;
 import com.framehost.device.service.DeviceAuthenticationService;
 import com.framehost.device.service.DeviceNotFoundException;
 import com.framehost.device.service.DeviceTokenService;
+import com.framehost.media.model.MediaSession;
+import com.framehost.room.dto.ClearMediaSessionResponse;
+import com.framehost.room.dto.CreateMediaSessionRequest;
 import com.framehost.room.dto.CreateRoomResponse;
 import com.framehost.room.dto.EndRoomResponse;
 import com.framehost.room.dto.JoinRoomRequest;
 import com.framehost.room.dto.JoinRoomResponse;
+import com.framehost.room.dto.MediaSessionResponse;
 import com.framehost.room.model.Room;
 import com.framehost.room.repository.InMemoryRoomRepository;
 
@@ -242,6 +246,60 @@ public class RoomService {
                 removedDevice.deviceId(),
                 "Device removed successfully.",
                 room.deviceCount()
+        );
+    }
+
+    // Creates or replaces a local media session for the authenticated Host.
+    public MediaSessionResponse createMediaSession(
+            String roomCode,
+            CreateMediaSessionRequest request,
+            String authorizationHeader
+    ) {
+
+        Room room = findRoom(roomCode);
+
+        // Authenticate the requesting device.
+        Device authenticatedDevice = authenticationService.authenticate(
+                room,
+                authorizationHeader
+        );
+
+        // Only the Host can create a media session.
+        requireHost(authenticatedDevice);
+
+        // Create and store session metadata.
+        MediaSession session = room.createMediaSession(
+                authenticatedDevice.deviceId(),
+                request.fileName(),
+                request.mimeType(),
+                request.fileSizeBytes()
+        );
+
+        return MediaSessionResponse.from(room.roomCode(), session);
+    }
+
+    // Clears the local media session for the authenticated Host.
+    public ClearMediaSessionResponse clearMediaSession(
+            String roomCode,
+            String authorizationHeader
+    ) {
+
+        Room room = findRoom(roomCode);
+
+        // Authenticate the requesting device.
+        Device authenticatedDevice = authenticationService.authenticate(
+                room,
+                authorizationHeader
+        );
+
+        // Only the Host can clear a media session.
+        requireHost(authenticatedDevice);
+
+        room.clearMediaSession(authenticatedDevice.deviceId());
+
+        return new ClearMediaSessionResponse(
+                room.roomCode(),
+                "Media session cleared successfully."
         );
     }
 

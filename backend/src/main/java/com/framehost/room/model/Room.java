@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import com.framehost.media.model.MediaSession;
 
 import com.framehost.device.Device;
 import com.framehost.device.DeviceRole;
@@ -31,6 +32,9 @@ public class Room {
 
     // Stores the current playback state for this room.
     private PlaybackState playbackState;
+
+    // Stores the active local media session for this room.
+    private MediaSession mediaSession;
 
     // Stores public device information.
     private final ConcurrentHashMap<String, Device> devices
@@ -74,6 +78,59 @@ public class Room {
     // Returns the current playback state.
     public synchronized PlaybackState playbackState() {
         return playbackState;
+    }
+    // Returns the current local media session.
+
+    public synchronized MediaSession mediaSession() {
+        return mediaSession;
+    }
+
+// Creates or replaces the room's local media session.
+    public synchronized MediaSession createMediaSession(
+            String ownerDeviceId,
+            String fileName,
+            String mimeType,
+            long fileSizeBytes
+    ) {
+        if (!isActive()) {
+            throw new IllegalStateException("Room is inactive.");
+        }
+
+        Device owner = findDevice(ownerDeviceId);
+
+        if (owner == null || owner.role() != DeviceRole.HOST) {
+            throw new IllegalStateException(
+                    "Only the Host can create a media session."
+            );
+        }
+
+        MediaSession newSession = MediaSession.create(
+                ownerDeviceId,
+                fileName,
+                mimeType,
+                fileSizeBytes
+        );
+
+        mediaSession = newSession;
+
+        return newSession;
+    }
+
+    // Clears the active media session.
+    public synchronized void clearMediaSession(String requestingDeviceId) {
+        if (!isActive()) {
+            throw new IllegalStateException("Room is inactive.");
+        }
+
+        Device requester = findDevice(requestingDeviceId);
+
+        if (requester == null || requester.role() != DeviceRole.HOST) {
+            throw new IllegalStateException(
+                    "Only the Host can clear the media session."
+            );
+        }
+
+        mediaSession = null;
     }
 
     // Updates playback state and generates a server-controlled version.
@@ -129,6 +186,9 @@ public class Room {
 
         // Release the room's playback state.
         playbackState = null;
+
+        // Release the active media session.
+        mediaSession = null;
 
         return true;
     }
