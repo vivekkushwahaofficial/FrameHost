@@ -329,4 +329,33 @@ class PlaybackCommandServiceTest {
                 () -> service.execute(room, HOST_ID, command)
         );
     }
+
+    @Test
+    void hostCanChangeToLocalMediaSession() {
+
+        // Create a local media session identifier.
+        String mediaSessionId = "8b7f2c91-5d4a-4e63-9a12-123456789abc";
+
+        // Create a command to select local media.
+        PlaybackCommandMessage command = new PlaybackCommandMessage(
+                PlaybackCommandType.CHANGE_VIDEO,
+                VideoProvider.LOCAL,
+                mediaSessionId,
+                null,
+                null
+        );
+
+        // Execute the command as the Host.
+        PlaybackState result = service.execute(
+                room,
+                HOST_ID,
+                command
+        );
+
+        // Verify the resulting playback state.
+        assertNotNull(result);
+        assertEquals(VideoProvider.LOCAL, result.videoProvider());
+        assertEquals(mediaSessionId, result.videoId());
+        assertEquals(PlaybackStatus.PAUSED, result.playbackStatus());
+    }
 }

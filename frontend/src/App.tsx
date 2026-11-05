@@ -6,6 +6,8 @@ import StatsPage from "./pages/StatsPage";
 import Hero from "./components/landing/Hero";
 import HowItWorks from "./components/landing/HowItWorks";
 import DeviceRoles from "./components/landing/DeviceRoles";
+import LocalMediaPlayer from "./components/player/LocalMediaPlayer";
+import type { MediaProvider } from "./types/media";
 
 import RoomAccess from "./components/room/RoomAccess";
 import RoomSession from "./components/room/RoomSession";
@@ -52,6 +54,9 @@ function FrameHostApp() {
 
   // Tracks which device's permissions are currently being updated.
   const [updatingDeviceId, setUpdatingDeviceId] = useState<string | null>(null);
+
+  // Select the playback provider.
+  const [playerMode, setPlayerMode] = useState<MediaProvider>("YOUTUBE");
 
   // Automatically scroll to the room access form when opened.
   useEffect(() => {
@@ -286,12 +291,48 @@ function FrameHostApp() {
               </p>
             )}
 
-            <YouTubePlayer
-              onLocalPlaybackEvent={playbackSync.onLocalPlaybackEvent}
-              remoteState={playbackSync.remoteState}
-              connectionStatus={playbackSync.connectionStatus}
-              syncError={playbackSync.error}
-            />
+            {/* Player provider selection */}
+            <section className="mx-auto mt-8 w-full max-w-5xl px-4 sm:px-6">
+              <div className="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => setPlayerMode("YOUTUBE")}
+                  aria-pressed={playerMode === "YOUTUBE"}
+                  className={`rounded-xl px-5 py-3 text-sm font-semibold transition-colors ${
+                    playerMode === "YOUTUBE"
+                      ? "bg-blue-600 text-white"
+                      : "border border-gray-300 text-gray-700 hover:bg-gray-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                  }`}
+                >
+                  YouTube
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPlayerMode("LOCAL")}
+                  aria-pressed={playerMode === "LOCAL"}
+                  className={`rounded-xl px-5 py-3 text-sm font-semibold transition-colors ${
+                    playerMode === "LOCAL"
+                      ? "bg-blue-600 text-white"
+                      : "border border-gray-300 text-gray-700 hover:bg-gray-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                  }`}
+                >
+                  Local Video
+                </button>
+              </div>
+            </section>
+
+            {/* Render the selected player */}
+            {playerMode === "YOUTUBE" ? (
+              <YouTubePlayer
+                onLocalPlaybackEvent={playbackSync.onLocalPlaybackEvent}
+                remoteState={playbackSync.remoteState}
+                connectionStatus={playbackSync.connectionStatus}
+                syncError={playbackSync.error}
+              />
+            ) : (
+              <LocalMediaPlayer />
+            )}
           </>
         ) : (
           <>

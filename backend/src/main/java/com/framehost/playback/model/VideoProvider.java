@@ -1,8 +1,7 @@
 package com.framehost.playback.model;
 
-// Supported video providers.
+// Supported media providers.
 public enum VideoProvider {
-
-    YOUTUBE
-
+    YOUTUBE,
+    LOCAL
 }

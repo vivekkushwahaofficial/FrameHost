@@ -15,10 +15,13 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.framehost.device.dto.DeviceManagementResponse;
 import com.framehost.device.dto.DeviceResponse;
+import com.framehost.room.dto.ClearMediaSessionResponse;
+import com.framehost.room.dto.CreateMediaSessionRequest;
 import com.framehost.room.dto.CreateRoomResponse;
 import com.framehost.room.dto.EndRoomResponse;
 import com.framehost.room.dto.JoinRoomRequest;
 import com.framehost.room.dto.JoinRoomResponse;
+import com.framehost.room.dto.MediaSessionResponse;
 import com.framehost.room.service.RoomService;
 
 import jakarta.validation.Valid;
@@ -116,6 +119,48 @@ public class RoomController {
         DeviceManagementResponse response = roomService.removeDevice(
                 roomCode,
                 deviceId,
+                authorizationHeader
+        );
+
+        return ResponseEntity.ok(response);
+    }
+
+    // POST /api/v1/rooms/{roomCode}/media-session
+    // Creates a local media session for the authenticated Host.
+    @PostMapping("/{roomCode}/media-session")
+    public ResponseEntity<MediaSessionResponse> createMediaSession(
+            @PathVariable String roomCode,
+            @Valid @RequestBody CreateMediaSessionRequest request,
+            @RequestHeader(
+                    value = "Authorization",
+                    required = false
+            ) String authorizationHeader
+    ) {
+
+        MediaSessionResponse response = roomService.createMediaSession(
+                roomCode,
+                request,
+                authorizationHeader
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .body(response);
+    }
+
+    // DELETE /api/v1/rooms/{roomCode}/media-session
+    // Clears the local media session for the authenticated Host.
+    @DeleteMapping("/{roomCode}/media-session")
+    public ResponseEntity<ClearMediaSessionResponse> clearMediaSession(
+            @PathVariable String roomCode,
+            @RequestHeader(
+                    value = "Authorization",
+                    required = false
+            ) String authorizationHeader
+    ) {
+
+        ClearMediaSessionResponse response = roomService.clearMediaSession(
+                roomCode,
                 authorizationHeader
         );
 

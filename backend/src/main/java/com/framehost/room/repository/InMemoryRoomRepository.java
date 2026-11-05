@@ -34,7 +34,7 @@ public class InMemoryRoomRepository {
     public long countActiveRooms() {
         return rooms.values()
                 .stream()
-                .filter(Room::isActive)
+                .filter(room -> room.isActive())
                 .count();
     }
 }
