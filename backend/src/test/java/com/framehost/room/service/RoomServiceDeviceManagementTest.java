@@ -1,4 +1,4 @@
-package com.framehost.room;
+package com.framehost.room.service;
 
 import java.time.Instant;
 import java.util.List;
@@ -26,9 +26,6 @@ import com.framehost.device.service.DeviceNotFoundException;
 import com.framehost.device.service.DeviceTokenService;
 import com.framehost.room.model.Room;
 import com.framehost.room.repository.InMemoryRoomRepository;
-import com.framehost.room.service.RoomCodeGenerator;
-import com.framehost.room.service.RoomOperationConflictException;
-import com.framehost.room.service.RoomService;
 
 class RoomServiceDeviceManagementTest {
 

@@ -1,4 +1,4 @@
-package com.framehost.room;
+package com.framehost.room.service;
 
 import java.time.Instant;
 import java.util.Optional;
@@ -23,11 +23,6 @@ import com.framehost.room.dto.JoinRoomRequest;
 import com.framehost.room.model.Room;
 import com.framehost.room.model.RoomStatus;
 import com.framehost.room.repository.InMemoryRoomRepository;
-import com.framehost.room.service.RoomCodeGenerator;
-import com.framehost.room.service.RoomFullException;
-import com.framehost.room.service.RoomNotFoundException;
-import com.framehost.room.service.RoomOperationConflictException;
-import com.framehost.room.service.RoomService;
 
 class RoomJoinServiceTest {
 

@@ -1,4 +1,4 @@
-package com.framehost.room;
+package com.framehost.room.service;
 
 import java.time.Instant;
 

@@ -10,6 +10,9 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import com.framehost.device.service.DeviceNotFoundException;
+import com.framehost.media.service.UploadLimitExceededException;
+import com.framehost.media.service.UploadSessionNotFoundException;
+import com.framehost.media.service.UploadStorageException;
 import com.framehost.room.service.RoomFullException;
 import com.framehost.room.service.RoomNotFoundException;
 import com.framehost.room.service.RoomOperationConflictException;
@@ -131,6 +134,39 @@ public class GlobalExceptionHandler {
         return createErrorResponse(
                 HttpStatus.BAD_REQUEST,
                 "Invalid request body."
+        );
+    }
+
+    // Handles video files that exceed the configured upload limit.
+    @ExceptionHandler(UploadLimitExceededException.class)
+    public ResponseEntity<ApiErrorResponse> handleUploadLimitExceeded(
+            UploadLimitExceededException exception
+    ) {
+        return createErrorResponse(
+                HttpStatus.valueOf(413),
+                exception.getMessage()
+        );
+    }
+
+    // Handles upload sessions that cannot be found.
+    @ExceptionHandler(UploadSessionNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleUploadSessionNotFound(
+            UploadSessionNotFoundException exception
+    ) {
+        return createErrorResponse(
+                HttpStatus.NOT_FOUND,
+                exception.getMessage()
+        );
+    }
+
+    // Handles filesystem storage failures without exposing internal details.
+    @ExceptionHandler(UploadStorageException.class)
+    public ResponseEntity<ApiErrorResponse> handleUploadStorage(
+            UploadStorageException exception
+    ) {
+        return createErrorResponse(
+                HttpStatus.INTERNAL_SERVER_ERROR,
+                "Unable to process the media storage operation."
         );
     }
 
