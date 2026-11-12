@@ -10,6 +10,8 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import com.framehost.device.service.DeviceNotFoundException;
+import com.framehost.media.service.InvalidUploadChunkException;
+import com.framehost.media.service.UploadConflictException;
 import com.framehost.media.service.UploadLimitExceededException;
 import com.framehost.media.service.UploadSessionNotFoundException;
 import com.framehost.media.service.UploadStorageException;
@@ -155,6 +157,26 @@ public class GlobalExceptionHandler {
     ) {
         return createErrorResponse(
                 HttpStatus.NOT_FOUND,
+                exception.getMessage()
+        );
+    }
+
+    @ExceptionHandler(InvalidUploadChunkException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidUploadChunk(
+            InvalidUploadChunkException exception
+    ) {
+        return createErrorResponse(
+                HttpStatus.BAD_REQUEST,
+                exception.getMessage()
+        );
+    }
+
+    @ExceptionHandler(UploadConflictException.class)
+    public ResponseEntity<ApiErrorResponse> handleUploadConflict(
+            UploadConflictException exception
+    ) {
+        return createErrorResponse(
+                HttpStatus.CONFLICT,
                 exception.getMessage()
         );
     }

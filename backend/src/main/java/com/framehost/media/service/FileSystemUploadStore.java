@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -233,6 +234,132 @@ public class FileSystemUploadStore {
         // Delete children first, then the parent directory.
         for (Path path : paths) {
             Files.deleteIfExists(path);
+        }
+    }
+    // Store one chunk using a temporary file and an atomic move.
+
+    public void writeChunk(
+            UUID uploadId,
+            int chunkIndex,
+            InputStream inputStream,
+            long expectedBytes
+    ) {
+        Path directory = chunkDirectory(uploadId);
+
+        Path temporaryFile = null;
+
+        try {
+            Files.createDirectories(directory);
+
+            Path targetFile = directory.resolve(
+                    String.format("%08d.part", chunkIndex)
+            );
+
+            // Never overwrite an already uploaded chunk.
+            if (Files.exists(targetFile)) {
+                throw new UploadConflictException(
+                        "This chunk has already been uploaded."
+                );
+            }
+
+            // Create the temporary file in the same directory.
+            temporaryFile = Files.createTempFile(
+                    directory,
+                    "chunk-" + chunkIndex + "-",
+                    ".tmp"
+            );
+
+            long totalBytes = 0;
+            byte[] buffer = new byte[8192];
+
+            // Stream data to disk without loading the whole chunk into memory.
+            try (OutputStream output = Files.newOutputStream(temporaryFile)) {
+
+                int bytesRead;
+
+                while ((bytesRead = inputStream.read(buffer)) != -1) {
+
+                    totalBytes += bytesRead;
+
+                    // Stop immediately if the client sends too much data.
+                    if (totalBytes > expectedBytes) {
+                        throw new InvalidUploadChunkException(
+                                "Chunk size exceeds the expected size."
+                        );
+                    }
+
+                    output.write(buffer, 0, bytesRead);
+                }
+            }
+
+            // Reject incomplete chunks.
+            if (totalBytes != expectedBytes) {
+                throw new InvalidUploadChunkException(
+                        "Chunk size does not match the expected size."
+                );
+            }
+
+            // Move the completed temporary file into its final location.
+            try {
+                Files.move(
+                        temporaryFile,
+                        targetFile,
+                        StandardCopyOption.ATOMIC_MOVE
+                );
+            } catch (AtomicMoveNotSupportedException exception) {
+                Files.move(temporaryFile, targetFile);
+            }
+
+            temporaryFile = null;
+
+        } catch (UploadConflictException | InvalidUploadChunkException exception) {
+            throw exception;
+
+        } catch (FileAlreadyExistsException exception) {
+            throw new UploadConflictException(
+                    "This chunk has already been uploaded."
+            );
+
+        } catch (IOException exception) {
+            throw new UploadStorageException(
+                    "Unable to store upload chunk.",
+                    exception
+            );
+
+        } finally {
+            // Remove incomplete temporary files.
+            if (temporaryFile != null) {
+                try {
+                    Files.deleteIfExists(temporaryFile);
+                } catch (IOException ignored) {
+                    // A leftover temporary file can be cleaned up later.
+                }
+            }
+        }
+    }
+
+// Check whether a chunk exists on disk.
+    public boolean chunkExists(UUID uploadId, int chunkIndex) {
+        Path chunkFile = chunkDirectory(uploadId).resolve(
+                String.format("%08d.part", chunkIndex)
+        );
+
+        return Files.isRegularFile(chunkFile);
+    }
+
+// Remove a chunk if manifest persistence fails.
+    public void deleteChunk(UUID uploadId, int chunkIndex) {
+        Path chunkFile = chunkDirectory(uploadId).resolve(
+                String.format("%08d.part", chunkIndex)
+        );
+
+        try {
+            Files.deleteIfExists(chunkFile);
+        } catch (IOException exception) {
+            throw new UploadStorageException(
+                    "Unable to remove upload chunk.",
+                    exception
+            );
         }
     }
 }
